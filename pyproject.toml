@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rag-eval"
+version = "1.0.0"
+description = "Reusable RAG evaluation framework for the minicloud platform"
+requires-python = ">=3.11"
+dependencies = [
+    "ragas>=0.2,<0.3",
+    "langchain-openai>=0.2",
+    "langchain-core>=0.3",
+    "rouge-score>=0.1.2",
+    "psycopg2-binary>=2.9",
+    "requests>=2.32",
+    "pandas>=2.0",
+]
+
+[project.scripts]
+rag-eval = "rag_eval.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["rag_eval*"]
