@@ -11,7 +11,12 @@ def generate_answer(query: str, chunks: list[str]) -> tuple[str, str]:
     model = os.environ.get("GENERATION_MODEL", "phi3-financial")
 
     context = "\n\n".join(f"[Source {i + 1}]: {c}" for i, c in enumerate(chunks))
-    messages = [{"role": "user", "content": f"Context:\n{context}\n\nQuestion: {query}"}]
+    instruction = (
+        "Réponds UNIQUEMENT en te basant sur le contexte fourni. "
+        "N'ajoute aucune information absente du contexte. "
+        "Si l'information n'est pas dans le contexte, indique-le clairement et brièvement.\n\n"
+    )
+    messages = [{"role": "user", "content": f"{instruction}Contexte:\n{context}\n\nQuestion : {query}"}]
 
     resp = requests.post(
         f"{base_url}/v1/chat/completions",

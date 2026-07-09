@@ -13,11 +13,10 @@ from rag_eval.ragas_runner import score_batch
 from rag_eval.langfuse_reporter import post_scores
 
 FAST_SAMPLE_DOMAINS = {
-    "regulatory_capital": 2,
+    "regulatory_capital": 3,
     "liquidity": 2,
-    "profitability": 2,
+    "profitability": 3,
     "lvmh": 2,
-    "off_topic": 2,
 }
 
 
