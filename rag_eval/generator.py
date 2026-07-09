@@ -2,6 +2,7 @@
 
 import os
 import json
+import time
 import requests
 
 
@@ -18,19 +19,29 @@ def generate_answer(query: str, chunks: list[str]) -> tuple[str, str]:
     )
     messages = [{"role": "user", "content": f"{instruction}Contexte:\n{context}\n\nQuestion : {query}"}]
 
-    resp = requests.post(
-        f"{base_url}/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            # Tag traces so Langfuse online_sampler can filter them
-            "X-Langfuse-Tags": json.dumps(["rag-eval"]),
-        },
-        json={"model": model, "messages": messages, "stream": False},
-        timeout=360,
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    answer = data["choices"][0]["message"]["content"]
-    trace_id = resp.headers.get("x-litellm-call-id", data.get("id", ""))
-    return answer, trace_id
+    last_exc = None
+    for attempt in range(3):
+        try:
+            resp = requests.post(
+                f"{base_url}/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                    "X-Langfuse-Tags": json.dumps(["rag-eval"]),
+                },
+                json={"model": model, "messages": messages, "stream": False},
+                timeout=420,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            answer = data["choices"][0]["message"]["content"]
+            trace_id = resp.headers.get("x-litellm-call-id", data.get("id", ""))
+            return answer, trace_id
+        except (requests.exceptions.ReadTimeout,
+                requests.exceptions.ConnectionError,
+                requests.exceptions.HTTPError) as exc:
+            last_exc = exc
+            wait = 15 * (attempt + 1)
+            print(f"  [gen-retry {attempt+1}/3] {type(exc).__name__}, retrying in {wait}s…", flush=True)
+            time.sleep(wait)
+    raise RuntimeError(f"generate_answer failed after 3 attempts: {last_exc}") from last_exc
