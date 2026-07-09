@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import random
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -23,6 +24,10 @@ FAST_SAMPLE_DOMAINS = {
 # Parallel workers — matches phi3-financial concurrent slots (18 total across 3 Ollama instances).
 # Cap at 10 so we don't overload during CI.
 EVAL_WORKERS = int(os.environ.get("EVAL_WORKERS", "10"))
+
+# Open WebUI retrieval is a Python HTTP server — cap concurrent retrieval at 5
+# to avoid request queue buildup causing 120s timeouts.
+_RETRIEVAL_SEM = threading.Semaphore(5)
 
 
 def _fast_subset(dataset: list[dict]) -> list[dict]:
@@ -44,7 +49,8 @@ def _fast_subset(dataset: list[dict]) -> list[dict]:
 
 def _eval_sample(idx: int, sample: dict, collection_uuid: str, total: int) -> dict:
     """Retrieve + generate for one sample. Runs in a thread."""
-    chunks = retrieve_chunks(sample["query"], collection_uuid)
+    with _RETRIEVAL_SEM:
+        chunks = retrieve_chunks(sample["query"], collection_uuid)
     answer, trace_id = generate_answer(sample["query"], chunks)
     print(f"[{idx}/{total}] ✓ {sample['query'][:70]}")
     return {"idx": idx - 1, "query": sample["query"], "answer": answer,

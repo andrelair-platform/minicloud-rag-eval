@@ -12,7 +12,7 @@ def retrieve_chunks(query: str, collection_name: str, k: int = 10) -> list[str]:
         f"{base_url}/api/v1/retrieval/query/collection",
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
         json={"collection_names": [collection_name], "query": query, "k": k},
-        timeout=30,
+        timeout=120,
     )
     resp.raise_for_status()
     data = resp.json()
