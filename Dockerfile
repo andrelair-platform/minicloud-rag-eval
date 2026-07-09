@@ -8,17 +8,7 @@ COPY rag_eval/ ./rag_eval/
 
 RUN pip install --no-cache-dir -e . && \
     pip cache purge && \
-    python3 -c "
-import ragas.llms.base as b
-from pathlib import Path
-p = Path(b.__file__)
-code = p.read_text()
-old = 'from langchain_community.chat_models.vertexai import ChatVertexAI'
-new = 'ChatVertexAI = None  # patched: not available in langchain-community>=0.3'
-if old in code:
-    p.write_text(code.replace(old, new))
-    print('Patched ragas/llms/base.py: removed VertexAI import')
-"
+    python3 -c "import ragas.llms.base as _b; from pathlib import Path; _p=Path(_b.__file__); _c=_p.read_text(); _old='from langchain_community.chat_models.vertexai import ChatVertexAI'; _new='ChatVertexAI = None'; _p.write_text(_c.replace(_old, _new)) if _old in _c else None; print('ragas/llms/base.py patched' if _old in _c else 'no patch needed')"
 
 RUN useradd --uid 1000 --no-create-home --shell /sbin/nologin appuser
 USER 1000
