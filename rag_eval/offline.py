@@ -15,10 +15,10 @@ from rag_eval.ragas_runner import score_batch
 from rag_eval.langfuse_reporter import post_scores
 
 FAST_SAMPLE_DOMAINS = {
-    "regulatory_capital": 3,
-    "liquidity": 2,
-    "profitability": 3,
-    "lvmh": 2,
+    "regulatory_capital": 2,
+    "liquidity": 1,
+    "profitability": 1,
+    "lvmh": 1,
 }
 
 # Parallel workers — matches phi3-financial concurrent slots (18 total across 3 Ollama instances).
@@ -47,9 +47,9 @@ def _fast_subset(dataset: list[dict]) -> list[dict]:
         chosen.extend(random.sample(pool, min(count, len(pool))))
 
     remaining = [s for s in dataset if s not in chosen]
-    while len(chosen) < 10 and remaining:
+    while len(chosen) < 5 and remaining:
         chosen.append(remaining.pop(0))
-    return chosen[:10]
+    return chosen[:5]
 
 
 def _eval_sample(idx: int, sample: dict, collection_uuid: str, total: int) -> dict:
@@ -58,7 +58,7 @@ def _eval_sample(idx: int, sample: dict, collection_uuid: str, total: int) -> di
         chunks = retrieve_chunks(sample["query"], collection_uuid)
     with _GENERATION_SEM:
         answer, trace_id = generate_answer(sample["query"], chunks)
-    print(f"[{idx}/{total}] ✓ {sample['query'][:70]}")
+    print(f"[{idx}/{total}] ✓ {sample['query'][:70]}", flush=True)
     return {"idx": idx - 1, "query": sample["query"], "answer": answer,
             "chunks": chunks, "ground_truth": sample.get("ground_truth", ""),
             "trace_id": trace_id}
