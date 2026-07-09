@@ -9,8 +9,9 @@ description = "Reusable RAG evaluation framework for the minicloud platform"
 requires-python = ">=3.11"
 dependencies = [
     "ragas>=0.2,<0.3",
-    "langchain-openai>=0.2",
-    "langchain-core>=0.3",
+    "langchain-openai>=0.2,<0.3",
+    "langchain-core>=0.3,<0.4",
+    "langchain-community>=0.2,<0.3",
     "rouge-score>=0.1.2",
     "psycopg2-binary>=2.9",
     "requests>=2.32",
