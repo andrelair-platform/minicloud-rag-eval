@@ -94,7 +94,7 @@ def run_offline_eval() -> None:
     agg = {
         "faithfulness": _mean("faithfulness"),
         "answer_relevancy": _mean("answer_relevancy"),
-        "context_relevancy": _mean("context_relevancy"),
+        "context_precision": _mean("context_precision"),
         "context_recall": _mean("context_recall"),
         "rouge_l": _mean("rouge_l"),
         "hit_rate": _mean("hit_rate"),

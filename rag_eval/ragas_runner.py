@@ -1,11 +1,11 @@
-"""Ragas LLM-as-judge metrics: faithfulness, answer_relevancy, context_relevancy, context_recall."""
+"""Ragas LLM-as-judge metrics: faithfulness, answer_relevancy, context_precision, context_recall."""
 
 import os
 from ragas import EvaluationDataset, SingleTurnSample, evaluate
 from ragas.metrics import (
     faithfulness,
     answer_relevancy,
-    context_relevancy,
+    context_precision,
     context_recall,
 )
 from ragas.llms import LangchainLLMWrapper
@@ -64,7 +64,7 @@ def score_batch(
 
     results = evaluate(
         dataset=dataset,
-        metrics=[faithfulness, answer_relevancy, context_relevancy, context_recall],
+        metrics=[faithfulness, answer_relevancy, context_precision, context_recall],
         llm=llm,
         embeddings=emb,
     )
@@ -76,7 +76,7 @@ def score_batch(
             {
                 "faithfulness": round(float(row.get("faithfulness", 0.0)), 4),
                 "answer_relevancy": round(float(row.get("answer_relevancy", 0.0)), 4),
-                "context_relevancy": round(float(row.get("context_relevancy", 0.0)), 4),
+                "context_precision": round(float(row.get("context_precision", 0.0)), 4),
                 "context_recall": round(float(row.get("context_recall", 0.0)), 4),
             }
         )
