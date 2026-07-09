@@ -26,9 +26,13 @@ FAST_SAMPLE_DOMAINS = {
 EVAL_WORKERS = int(os.environ.get("EVAL_WORKERS", "10"))
 
 # Open WebUI runs cross-encoder re-ranking in-process. The re-ranker alone uses
-# ~300MB peak; 2 concurrent calls stay within the 1Gi pod memory limit.
+# ~300MB peak; 2 concurrent calls stay within the 3Gi pod memory limit.
 # More than 2 concurrent retrieval+rerank calls → OOMKill → RemoteDisconnected.
 _RETRIEVAL_SEM = threading.Semaphore(2)
+
+# phi3-financial runs on CPU (Ollama). Concurrent generation calls saturate the
+# CPU and each call can take 6+ min instead of ~60s. Run generation sequentially.
+_GENERATION_SEM = threading.Semaphore(1)
 
 
 def _fast_subset(dataset: list[dict]) -> list[dict]:
@@ -52,7 +56,8 @@ def _eval_sample(idx: int, sample: dict, collection_uuid: str, total: int) -> di
     """Retrieve + generate for one sample. Runs in a thread."""
     with _RETRIEVAL_SEM:
         chunks = retrieve_chunks(sample["query"], collection_uuid)
-    answer, trace_id = generate_answer(sample["query"], chunks)
+    with _GENERATION_SEM:
+        answer, trace_id = generate_answer(sample["query"], chunks)
     print(f"[{idx}/{total}] ✓ {sample['query'][:70]}")
     return {"idx": idx - 1, "query": sample["query"], "answer": answer,
             "chunks": chunks, "ground_truth": sample.get("ground_truth", ""),
