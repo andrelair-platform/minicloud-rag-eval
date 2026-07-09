@@ -18,12 +18,14 @@ def _host() -> str:
 def post_scores(trace_id: str, scores: dict[str, float]) -> None:
     if not trace_id:
         return
+    import math
     pub, sec = _auth()
     for name, value in scores.items():
+        safe_value = 0.0 if (value is None or (isinstance(value, float) and (math.isnan(value) or math.isinf(value)))) else float(value)
         requests.post(
             f"{_host()}/api/public/scores",
             auth=(pub, sec),
-            json={"traceId": trace_id, "name": name, "value": value},
+            json={"traceId": trace_id, "name": name, "value": safe_value},
             timeout=10,
         ).raise_for_status()
 
