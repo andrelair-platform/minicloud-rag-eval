@@ -30,18 +30,20 @@ def post_scores(trace_id: str, scores: dict[str, float]) -> None:
         ).raise_for_status()
 
 
-def get_traces(minutes: int = 15, limit: int = 100) -> list[dict]:
+def get_traces(minutes: int = 15, limit: int = 20) -> list[dict]:
+    # limit=100 causes Langfuse v3 to issue a slow full-table scan → internal DB timeout → 422.
+    # Keep limit ≤20; the online sampler only needs a handful of recent traces.
     from datetime import datetime, timedelta, timezone
 
-    from_ts = (
-        datetime.now(timezone.utc) - timedelta(minutes=minutes)
-    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = datetime.now(timezone.utc)
+    from_ts = (now - timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    to_ts = now.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     pub, sec = _auth()
     resp = requests.get(
         f"{_host()}/api/public/traces",
         auth=(pub, sec),
-        params={"limit": limit, "fromTimestamp": from_ts},
+        params={"limit": limit, "fromTimestamp": from_ts, "toTimestamp": to_ts},
         timeout=30,
     )
     resp.raise_for_status()
