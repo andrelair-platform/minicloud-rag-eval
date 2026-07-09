@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import random
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from rag_eval.retriever import retrieve_chunks
@@ -19,6 +20,10 @@ FAST_SAMPLE_DOMAINS = {
     "lvmh": 2,
 }
 
+# Parallel workers — matches phi3-financial concurrent slots (18 total across 3 Ollama instances).
+# Cap at 10 so we don't overload during CI.
+EVAL_WORKERS = int(os.environ.get("EVAL_WORKERS", "10"))
+
 
 def _fast_subset(dataset: list[dict]) -> list[dict]:
     """Pick 10 representative samples across domains for the CI fast gate."""
@@ -31,11 +36,20 @@ def _fast_subset(dataset: list[dict]) -> list[dict]:
         pool = by_domain.get(domain, [])
         chosen.extend(random.sample(pool, min(count, len(pool))))
 
-    # Fill to 10 if domains are sparse
     remaining = [s for s in dataset if s not in chosen]
     while len(chosen) < 10 and remaining:
         chosen.append(remaining.pop(0))
     return chosen[:10]
+
+
+def _eval_sample(idx: int, sample: dict, collection_uuid: str, total: int) -> dict:
+    """Retrieve + generate for one sample. Runs in a thread."""
+    chunks = retrieve_chunks(sample["query"], collection_uuid)
+    answer, trace_id = generate_answer(sample["query"], chunks)
+    print(f"[{idx}/{total}] ✓ {sample['query'][:70]}")
+    return {"idx": idx - 1, "query": sample["query"], "answer": answer,
+            "chunks": chunks, "ground_truth": sample.get("ground_truth", ""),
+            "trace_id": trace_id}
 
 
 def run_offline_eval() -> None:
@@ -49,19 +63,25 @@ def run_offline_eval() -> None:
     subset = _fast_subset(dataset) if fast_mode else dataset
 
     mode_label = f"FAST ({len(subset)}/{len(dataset)} samples)" if fast_mode else f"FULL ({len(subset)} samples)"
-    print(f"\n=== RAG Eval — {mode_label} ===\n")
+    print(f"\n=== RAG Eval — {mode_label} | {EVAL_WORKERS} parallel workers ===\n")
+    print(f"[→] Launching {len(subset)} samples in parallel…")
 
-    # --- Retrieval + Generation ---
-    queries, answers, contexts, ground_truths, trace_ids = [], [], [], [], []
-    for i, sample in enumerate(subset, 1):
-        print(f"[{i}/{len(subset)}] {sample['query'][:80]}")
-        chunks = retrieve_chunks(sample["query"], collection_uuid)
-        answer, trace_id = generate_answer(sample["query"], chunks)
-        queries.append(sample["query"])
-        answers.append(answer)
-        contexts.append(chunks)
-        ground_truths.append(sample.get("ground_truth", ""))
-        trace_ids.append(trace_id)
+    # --- Parallel Retrieval + Generation ---
+    ordered: list[dict] = [{}] * len(subset)
+    with ThreadPoolExecutor(max_workers=EVAL_WORKERS) as pool:
+        futures = {
+            pool.submit(_eval_sample, i + 1, sample, collection_uuid, len(subset)): i
+            for i, sample in enumerate(subset)
+        }
+        for future in as_completed(futures):
+            result = future.result()
+            ordered[result["idx"]] = result
+
+    queries      = [r["query"]        for r in ordered]
+    answers      = [r["answer"]       for r in ordered]
+    contexts     = [r["chunks"]       for r in ordered]
+    ground_truths = [r["ground_truth"] for r in ordered]
+    trace_ids    = [r["trace_id"]     for r in ordered]
 
     # --- Ragas batch (LLM judge) ---
     print("\n[Ragas] Running LLM-as-judge metrics…")
@@ -71,9 +91,9 @@ def run_offline_eval() -> None:
     results = []
     for i, sample in enumerate(subset):
         det = {
-            "rouge_l": rouge_l(answers[i], ground_truths[i]),
-            "hit_rate": hit_rate(ground_truths[i], contexts[i]),
-            "mrr": mrr(ground_truths[i], contexts[i]),
+            "rouge_l":   rouge_l(answers[i], ground_truths[i]),
+            "hit_rate":  hit_rate(ground_truths[i], contexts[i]),
+            "mrr":       mrr(ground_truths[i], contexts[i]),
         }
         all_scores = {**ragas_scores[i], **det}
 
@@ -91,13 +111,13 @@ def run_offline_eval() -> None:
         return round(sum(vals) / len(vals), 4) if vals else 0.0
 
     agg = {
-        "faithfulness": _mean("faithfulness"),
-        "answer_relevancy": _mean("answer_relevancy"),
+        "faithfulness":      _mean("faithfulness"),
+        "answer_relevancy":  _mean("answer_relevancy"),
         "context_precision": _mean("context_precision"),
-        "context_recall": _mean("context_recall"),
-        "rouge_l": _mean("rouge_l"),
-        "hit_rate": _mean("hit_rate"),
-        "mrr": _mean("mrr"),
+        "context_recall":    _mean("context_recall"),
+        "rouge_l":           _mean("rouge_l"),
+        "hit_rate":          _mean("hit_rate"),
+        "mrr":               _mean("mrr"),
     }
 
     # --- Print summary ---
@@ -114,7 +134,7 @@ def run_offline_eval() -> None:
         print(f"│ {metric:<24} │ {flag} {value:.4f}{threshold:<8}│")
     print("└──────────────────────────┴──────────────────┘\n")
 
-    # --- CI gate: fail if below threshold ---
+    # --- CI gate ---
     failures = []
     if agg["faithfulness"] < faithfulness_threshold:
         failures.append(f"faithfulness {agg['faithfulness']:.4f} < {faithfulness_threshold}")
