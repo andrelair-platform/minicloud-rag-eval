@@ -30,7 +30,7 @@ def post_scores(trace_id: str, scores: dict[str, float]) -> None:
         ).raise_for_status()
 
 
-def get_traces(minutes: int = 15, limit: int = 200) -> list[dict]:
+def get_traces(minutes: int = 15, limit: int = 100) -> list[dict]:
     from datetime import datetime, timedelta, timezone
 
     from_ts = (
