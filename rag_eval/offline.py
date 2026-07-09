@@ -25,9 +25,10 @@ FAST_SAMPLE_DOMAINS = {
 # Cap at 10 so we don't overload during CI.
 EVAL_WORKERS = int(os.environ.get("EVAL_WORKERS", "10"))
 
-# Open WebUI retrieval is a Python HTTP server — cap concurrent retrieval at 5
-# to avoid request queue buildup causing 120s timeouts.
-_RETRIEVAL_SEM = threading.Semaphore(5)
+# Open WebUI runs cross-encoder re-ranking in-process. The re-ranker alone uses
+# ~300MB peak; 2 concurrent calls stay within the 1Gi pod memory limit.
+# More than 2 concurrent retrieval+rerank calls → OOMKill → RemoteDisconnected.
+_RETRIEVAL_SEM = threading.Semaphore(2)
 
 
 def _fast_subset(dataset: list[dict]) -> list[dict]:
