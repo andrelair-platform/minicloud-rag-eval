@@ -1,4 +1,4 @@
-"""Generate an answer from phi3-financial via LiteLLM and return (answer, trace_id)."""
+"""Generate an answer from gpt-4o-mini via LiteLLM and return (answer, trace_id)."""
 
 import os
 import json
@@ -9,7 +9,7 @@ import requests
 def generate_answer(query: str, chunks: list[str]) -> tuple[str, str]:
     base_url = os.environ["LITELLM_BASE_URL"].rstrip("/")
     api_key = os.environ["LITELLM_API_KEY"]
-    model = os.environ.get("GENERATION_MODEL", "phi3-financial")
+    model = os.environ.get("GENERATION_MODEL", "gpt-4o-mini")
 
     context = "\n\n".join(f"[Source {i + 1}]: {c}" for i, c in enumerate(chunks))
     instruction = (
