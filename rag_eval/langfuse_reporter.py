@@ -51,13 +51,13 @@ def get_traces(minutes: int = 15, limit: int = 20) -> list[dict]:
 
 
 def filter_phi3_financial(traces: list[dict]) -> list[dict]:
-    """Keep only traces from phi3-financial model, not already scored online."""
+    """Keep only traces from gpt-4o-mini model, not already scored online."""
     out = []
     for t in traces:
         name = (t.get("name") or "").lower()
         tags = t.get("tags") or []
         # LiteLLM sets trace name to the model name
-        if "phi3-financial" in name or "phi3-financial" in tags:
+        if "gpt-4o-mini" in name or "gpt-4o-mini" in tags:
             if "online_faithfulness" not in [s.get("name") for s in t.get("scores", [])]:
                 out.append(t)
     return out

@@ -21,8 +21,8 @@ FAST_SAMPLE_DOMAINS = {
     "lvmh": 1,
 }
 
-# Parallel workers — matches phi3-financial concurrent slots (18 total across 3 Ollama instances).
-# Cap at 10 so we don't overload during CI.
+# Parallel workers for retrieval + scoring. Capped so we stay within pod memory
+# and LiteLLM rate limits during CI.
 EVAL_WORKERS = int(os.environ.get("EVAL_WORKERS", "10"))
 
 # Open WebUI runs cross-encoder re-ranking in-process. The re-ranker alone uses
@@ -30,8 +30,8 @@ EVAL_WORKERS = int(os.environ.get("EVAL_WORKERS", "10"))
 # More than 2 concurrent retrieval+rerank calls → OOMKill → RemoteDisconnected.
 _RETRIEVAL_SEM = threading.Semaphore(2)
 
-# phi3-financial runs on CPU (Ollama). Concurrent generation calls saturate the
-# CPU and each call can take 6+ min instead of ~60s. Run generation sequentially.
+# Generation goes through LiteLLM (gpt-4o-mini). Kept sequential to keep eval cost
+# predictable and stay within LiteLLM rate limits in CI (raise if you have headroom).
 _GENERATION_SEM = threading.Semaphore(1)
 
 

@@ -1,4 +1,4 @@
-"""Online sampling: score 5% of recent phi3-financial production traces."""
+"""Online sampling: score 5% of recent gpt-4o-mini production traces."""
 
 import os
 import random
@@ -21,7 +21,7 @@ def run_online_eval() -> None:
     print(f"[online-eval] Fetching traces from last {window_minutes} min…")
     traces = get_traces(minutes=window_minutes)
     candidates = filter_phi3_financial(traces)
-    print(f"[online-eval] {len(traces)} total traces, {len(candidates)} phi3-financial unscored")
+    print(f"[online-eval] {len(traces)} total traces, {len(candidates)} gpt-4o-mini unscored")
 
     if not candidates:
         print("[online-eval] Nothing to score.")
