@@ -101,7 +101,7 @@ jobs:
         run: |
           cosign sign --yes ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
 
-      - name: Update gitops image tags (main only)
+      - name: Bump gitops image tag via PR (main only)
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ secrets.GITOPS_TOKEN }}
@@ -118,6 +118,14 @@ jobs:
             manifests/ai/16-rag-eval-job.yaml \
             manifests/ai/17-rag-eval-cronjob.yaml
           git add manifests/ai/16-rag-eval-job.yaml manifests/ai/17-rag-eval-cronjob.yaml
-          git diff --cached --quiet || \
-            git commit -S -m "ci(rag-eval): bump image to ${NEW_TAG}"
-          git push
+          if git diff --cached --quiet; then echo 'no manifest change; nothing to bump'; exit 0; fi
+          BRANCH="ci/bump-rag-eval-${NEW_TAG}"
+          git checkout -b "$BRANCH"
+          git commit -S -m "ci(rag-eval): bump image to ${NEW_TAG}"
+          git push origin "$BRANCH"
+          gh pr create --repo andrelair-platform/minicloud-gitops --base main --head "$BRANCH" \
+            --title "ci(rag-eval): bump image to ${NEW_TAG}" \
+            --body 'Automated image bump from CI (branch protection requires a PR, not a direct push).'
+          for _ in 1 2 3 4 5; do
+            gh pr merge --repo andrelair-platform/minicloud-gitops "$BRANCH" --squash --delete-branch && break || sleep 6
+          done
