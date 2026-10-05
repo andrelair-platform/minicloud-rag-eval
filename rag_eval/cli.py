@@ -1,4 +1,4 @@
-"""Entrypoint — dispatches to offline | online | generate-dataset modes."""
+"""Entrypoint — dispatches to offline | online | generate-dataset | harvest-negatives modes."""
 
 import os
 import sys
@@ -16,8 +16,15 @@ def main() -> None:
     elif mode == "generate-dataset":
         from rag_eval.generate_dataset import generate_dataset
         generate_dataset()
+    elif mode == "harvest-negatives":
+        # Retrieva target (RTV-75): harvest 👎-rated chat-RAG traces into a Langfuse dataset.
+        from rag_eval.retrieva import run_harvest_negatives
+        run_harvest_negatives()
     else:
-        print(f"Unknown EVAL_MODE: {mode!r}. Use offline | online | generate-dataset", file=sys.stderr)
+        print(
+            f"Unknown EVAL_MODE: {mode!r}. Use offline | online | generate-dataset | harvest-negatives",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
 

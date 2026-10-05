@@ -18,6 +18,9 @@ dependencies = [
     "pandas>=2.0",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
 [project.scripts]
 rag-eval = "rag_eval.cli:main"
 
