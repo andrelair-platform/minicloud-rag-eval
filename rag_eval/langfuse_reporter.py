@@ -30,6 +30,75 @@ def post_scores(trace_id: str, scores: dict[str, float]) -> None:
         ).raise_for_status()
 
 
+# ── Datasets (generic; used by the Retrieva negatives harvester, RTV-75) ──────────
+# Langfuse v3 public API: datasets live under /api/public/v2/datasets, items under
+# /api/public/dataset-items (same host/auth as traces + scores above).
+
+
+def ensure_dataset(name: str, description: Optional[str] = None) -> None:
+    """Create the dataset if absent. Langfuse upserts by name, so a re-run is a no-op (200)."""
+    pub, sec = _auth()
+    body: dict = {"name": name}
+    if description:
+        body["description"] = description
+    resp = requests.post(
+        f"{_host()}/api/public/v2/datasets", auth=(pub, sec), json=body, timeout=15
+    )
+    if resp.status_code not in (200, 201, 409):  # 409 = already exists on some versions
+        resp.raise_for_status()
+
+
+def list_dataset_source_trace_ids(name: str) -> set[str]:
+    """Trace ids already represented in the dataset — the idempotency key for harvesting."""
+    pub, sec = _auth()
+    seen: set[str] = set()
+    page = 1
+    while True:
+        resp = requests.get(
+            f"{_host()}/api/public/dataset-items",
+            auth=(pub, sec),
+            params={"datasetName": name, "limit": 50, "page": page},
+            timeout=30,
+        )
+        if resp.status_code == 404:
+            break
+        resp.raise_for_status()
+        data = resp.json().get("data", [])
+        if not data:
+            break
+        for item in data:
+            tid = item.get("sourceTraceId") or (item.get("metadata") or {}).get("traceId")
+            if tid:
+                seen.add(tid)
+        if len(data) < 50:
+            break
+        page += 1
+    return seen
+
+
+def upsert_dataset_item(
+    dataset_name: str,
+    *,
+    item_id: str,
+    input_: object,
+    expected_output: Optional[object] = None,
+    metadata: Optional[dict] = None,
+    source_trace_id: Optional[str] = None,
+) -> None:
+    """Create/overwrite a dataset item. A stable item_id makes re-POST an upsert, not a dup."""
+    pub, sec = _auth()
+    body: dict = {"datasetName": dataset_name, "id": item_id, "input": input_}
+    if expected_output is not None:
+        body["expectedOutput"] = expected_output
+    if metadata is not None:
+        body["metadata"] = metadata
+    if source_trace_id:
+        body["sourceTraceId"] = source_trace_id
+    requests.post(
+        f"{_host()}/api/public/dataset-items", auth=(pub, sec), json=body, timeout=15
+    ).raise_for_status()
+
+
 def get_traces(minutes: int = 15, limit: int = 20) -> list[dict]:
     # limit=100 causes Langfuse v3 to issue a slow full-table scan → internal DB timeout → 422.
     # Keep limit ≤20; the online sampler only needs a handful of recent traces.
