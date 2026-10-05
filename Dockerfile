@@ -1,13 +1,20 @@
+# syntax=docker/dockerfile:1.7
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install build deps, then the package and its dependencies
+# uv — ~10× faster dependency resolution/install than pip (build-time only).
+RUN pip install --no-cache-dir uv
+
 COPY pyproject.toml .
 COPY rag_eval/ ./rag_eval/
 
-RUN pip install --no-cache-dir -e . && \
-    pip cache purge && \
+# Install deps with a BuildKit cache mount: uv reuses downloaded wheels across builds
+# (the cache lives OUTSIDE the image layer, so the final image stays small — the win
+# `--no-cache-dir`/`pip cache purge` used to give — AND rebuilds are fast). uv's fast
+# resolver is the main cold-build speed-up for the heavy ragas/langchain stack.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system -e . && \
     find /usr/local/lib/python3.11/site-packages/ragas -name "base.py" -path "*/llms/*" \
       -exec sed -i 's|from langchain_community.chat_models.vertexai import ChatVertexAI|ChatVertexAI = None  # patched: removed in langchain-community>=0.3|g' {} \; && \
     python3 -c "from ragas.llms import LangchainLLMWrapper; print('ragas import OK')"
