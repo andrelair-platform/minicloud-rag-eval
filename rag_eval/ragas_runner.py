@@ -83,6 +83,24 @@ def score_batch(
     return scores
 
 
+def score_relevancy_batch(queries: list[str], answers: list[str]) -> list[float]:
+    """answer_relevancy only (no contexts/reference needed) — for scoring harvested
+    chat answers where we have the question + answer but not the retrieved context (RTV-75b)."""
+    llm = _build_llm()
+    emb = _build_embeddings()
+    samples = [
+        SingleTurnSample(user_input=q, response=a) for q, a in zip(queries, answers)
+    ]
+    results = evaluate(
+        dataset=EvaluationDataset(samples=samples),
+        metrics=[answer_relevancy],
+        llm=llm,
+        embeddings=emb,
+    )
+    df = results.to_pandas()
+    return [round(float(row.get("answer_relevancy", 0.0)), 4) for _, row in df.iterrows()]
+
+
 def score_faithfulness_single(query: str, answer: str, contexts: list[str]) -> float:
     """Lightweight single-sample faithfulness check for online sampling."""
     llm = _build_llm()

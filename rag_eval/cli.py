@@ -17,12 +17,17 @@ def main() -> None:
         from rag_eval.generate_dataset import generate_dataset
         generate_dataset()
     elif mode == "harvest-negatives":
-        # Retrieva target (RTV-75): harvest 👎-rated chat-RAG traces into a Langfuse dataset.
+        # Retrieva target (RTV-75a): harvest 👎-rated chat-RAG traces into a Langfuse dataset.
         from rag_eval.retrieva import run_harvest_negatives
         run_harvest_negatives()
+    elif mode == "score-negatives":
+        # Retrieva target (RTV-75b): RAGAS answer_relevancy baseline over the negatives dataset.
+        from rag_eval.retrieva import run_score_negatives
+        run_score_negatives()
     else:
         print(
-            f"Unknown EVAL_MODE: {mode!r}. Use offline | online | generate-dataset | harvest-negatives",
+            "Unknown EVAL_MODE: "
+            f"{mode!r}. Use offline | online | generate-dataset | harvest-negatives | score-negatives",
             file=sys.stderr,
         )
         sys.exit(1)

@@ -76,6 +76,33 @@ def list_dataset_source_trace_ids(name: str) -> set[str]:
     return seen
 
 
+def get_dataset_items(name: str, limit_total: Optional[int] = None) -> list[dict]:
+    """All items in a dataset (paginated). `limit_total` caps the result for cost control."""
+    pub, sec = _auth()
+    items: list[dict] = []
+    page = 1
+    while True:
+        resp = requests.get(
+            f"{_host()}/api/public/dataset-items",
+            auth=(pub, sec),
+            params={"datasetName": name, "limit": 50, "page": page},
+            timeout=30,
+        )
+        if resp.status_code == 404:
+            break
+        resp.raise_for_status()
+        data = resp.json().get("data", [])
+        if not data:
+            break
+        items.extend(data)
+        if limit_total and len(items) >= limit_total:
+            return items[:limit_total]
+        if len(data) < 50:
+            break
+        page += 1
+    return items
+
+
 def upsert_dataset_item(
     dataset_name: str,
     *,
