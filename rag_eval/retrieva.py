@@ -21,6 +21,8 @@ from rag_eval.langfuse_reporter import (
     ensure_dataset,
     list_dataset_source_trace_ids,
     upsert_dataset_item,
+    get_dataset_items,
+    post_scores,
 )
 
 RAG_CHAT_TAG = "feature:rag-chat"  # set by retrieva-backend startTrace (services/rag.ts)
@@ -116,3 +118,52 @@ def run_harvest_negatives() -> None:
         print(f"  + {tid[:8]}… harvested")
 
     print(f"[harvest-negatives] done: added={added} skipped={skipped}")
+
+
+# ── offline scoring (RTV-75b): RAGAS answer_relevancy over the harvested negatives ──
+# answer_relevancy needs only question + answer (no retrieved context), so it scores the
+# captured production answers directly → a repeatable RAGAS baseline on the disliked set
+# (and the number a tuned prompt must beat). A full A/B of a *candidate* prompt additionally
+# needs answers GENERATED under that prompt — that belongs in retrieva-backend (a "replay
+# under prompt label X" step reusing the real RAG), NOT re-implemented here, to avoid
+# duplicating Retrieva's RAG. The same scorer then compares candidate vs this baseline.
+
+
+def _item_qa(item: dict) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """(question, answer, traceId) from a dataset item. Prefers a human-curated
+    expectedOutput as the answer; falls back to the production answer captured at harvest."""
+    question = item.get("input")
+    if isinstance(question, dict):
+        question = question.get("question") or question.get("query") or question.get("content")
+    meta = item.get("metadata") or {}
+    answer = item.get("expectedOutput") or meta.get("proposedAnswer")
+    trace_id = item.get("sourceTraceId") or meta.get("traceId")
+    return question, answer, trace_id
+
+
+def run_score_negatives(scorer=None) -> None:
+    """Score the rag-chat-negatives dataset with RAGAS answer_relevancy; post each score
+    back to its source trace and print the aggregate baseline."""
+    if scorer is None:  # lazy: ragas is heavy + only needed here
+        from rag_eval.ragas_runner import score_relevancy_batch
+
+        scorer = score_relevancy_batch
+
+    cap = int(os.environ.get("SCORE_MAX_ITEMS", "25"))  # cost cap (LLM per item)
+    items = get_dataset_items(DATASET, limit_total=cap)
+    usable = [(q, a, tid) for (q, a, tid) in (_item_qa(it) for it in items) if q and a]
+    print(
+        f"[score-negatives] dataset={DATASET} items={len(items)} "
+        f"scorable={len(usable)} skipped={len(items) - len(usable)} (cap={cap})"
+    )
+    if not usable:
+        return
+
+    scores = scorer([q for q, _, _ in usable], [a for _, a, _ in usable])
+    total = 0.0
+    for (_q, _a, tid), s in zip(usable, scores):
+        if tid:
+            post_scores(tid, {"offline_answer_relevancy": s})
+        total += s
+        print(f"  {str(tid)[:8]}… answer_relevancy={s:.4f}")
+    print(f"[score-negatives] mean answer_relevancy = {total / len(scores):.4f} over {len(scores)} items")

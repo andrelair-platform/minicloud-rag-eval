@@ -66,3 +66,47 @@ def test_harvest_upserts_new_negatives_and_dedupes(monkeypatch):
     assert only["input_"] == "q?"
     assert only["metadata"]["traceId"] == "t_new"
     assert only["metadata"]["feedbackValue"] == 0.0
+
+
+# ── score-negatives (RTV-75b): item mapping + scoring loop ────────────────────
+
+def test_item_qa_prefers_curated_expected_output_over_harvested_answer():
+    # curated expectedOutput wins
+    q, a, tid = retrieva._item_qa(
+        {"input": "why?", "expectedOutput": "ideal", "metadata": {"proposedAnswer": "prod", "traceId": "t1"}}
+    )
+    assert (q, a, tid) == ("why?", "ideal", "t1")
+    # falls back to the production answer when not curated; dict input is unwrapped
+    q, a, tid = retrieva._item_qa(
+        {"input": {"question": "q2"}, "sourceTraceId": "t2", "metadata": {"proposedAnswer": "prod2"}}
+    )
+    assert (q, a, tid) == ("q2", "prod2", "t2")
+
+
+def test_score_negatives_scores_scorable_items_and_posts(monkeypatch):
+    items = [
+        {"input": "q1", "metadata": {"proposedAnswer": "a1", "traceId": "t1"}},
+        {"input": "q2", "expectedOutput": "a2", "sourceTraceId": "t2"},
+        {"input": None, "metadata": {"proposedAnswer": "a3", "traceId": "t3"}},  # no question → skip
+        {"input": "q4", "metadata": {"traceId": "t4"}},  # no answer → skip
+    ]
+    posted = []
+    monkeypatch.setattr(retrieva, "get_dataset_items", lambda name, limit_total=None: items)
+    monkeypatch.setattr(retrieva, "post_scores", lambda tid, scores: posted.append((tid, scores)))
+
+    captured = {}
+
+    def fake_scorer(queries, answers):
+        captured["queries"] = queries
+        captured["answers"] = answers
+        return [0.9, 0.3]
+
+    retrieva.run_score_negatives(scorer=fake_scorer)
+
+    # only the two scorable items are sent to the scorer, in order
+    assert captured["queries"] == ["q1", "q2"]
+    assert captured["answers"] == ["a1", "a2"]
+    # each score posted to its source trace under the offline metric name
+    assert ("t1", {"offline_answer_relevancy": 0.9}) in posted
+    assert ("t2", {"offline_answer_relevancy": 0.3}) in posted
+    assert len(posted) == 2
