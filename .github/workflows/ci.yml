@@ -2,9 +2,9 @@ name: Build and Push
 
 on:
   push:
-    branches: [main, staging, dev]
+    branches: [main, dev]
   pull_request:
-    branches: [main, staging]
+    branches: [main]
 
 env:
   REGISTRY: harbor.10.0.0.200.nip.io
@@ -25,7 +25,11 @@ jobs:
         id: meta
         run: |
           SHA=$(git rev-parse --short HEAD)
-          BRANCH=${GITHUB_REF_NAME}
+          # Sanitise to valid Docker-tag chars: on a pull_request GITHUB_REF_NAME is
+          # "<n>/merge" (e.g. 3/merge), and the '/' makes an invalid tag that buildx
+          # rejects even with push:false. Map any disallowed char to '-'. 'main' is
+          # unaffected, so the push-to-main SHA tag is unchanged.
+          BRANCH=${GITHUB_REF_NAME//[^A-Za-z0-9_.-]/-}
           if [ "$BRANCH" = "main" ]; then
             TAG="${SHA}"
           else
